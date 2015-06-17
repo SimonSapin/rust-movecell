@@ -1,0 +1,14 @@
+[package]
+name = "movecell"
+version = "0.1.0"
+authors = ["Simon Sapin <simon.sapin@exyr.org>"]
+license = "Apache-2.0 / MIT"
+repository = "https://github.com/SimonSapin/rust-movecell"
+description = "`std::cell::Cell` for not-implicitly-copyable types."
+readme = "README.md"
+
+
+[lib]
+name = "movecell"
+path = "lib.rs"
+doctest = false
