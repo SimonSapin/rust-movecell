@@ -23,9 +23,73 @@ impl<T> MoveCell<T> {
 }
 
 
+/// Convenience methods for when the value happens to be an `Option`.
+impl<T> MoveCell<Option<T>> {
+    /// Return the inner optional value after replacing it with `None`.
+    #[inline]
+    pub fn take(&self) -> Option<T> {
+        self.replace(None)
+    }
+
+    /// Apply a function to a reference to the inner optional value.
+    /// The cell’s contents are temporarily set to `None` during the call.
+    #[inline]
+    pub fn peek<U, F>(&self, f: F) -> U where F: FnOnce(&Option<T>) -> U {
+        let option = self.take();
+        let result = f(&option);
+        self.replace(option);
+        result
+    }
+
+    /// Apply a function to a reference to the inner value if it is `Some(_)`.
+    /// The cell’s contents are temporarily set to `None` during the call.
+    #[inline]
+    pub fn map_inner<U, F>(&self, f: F) -> Option<U> where F: FnOnce(&T) -> U {
+        self.peek(|option| option.as_ref().map(f))
+    }
+
+    /// Return a clone of the inner optional value.
+    /// The cell’s contents are temporarily set to `None` during the clone.
+    #[inline]
+    pub fn clone_inner(&self) -> Option<T> where T: Clone {
+        self.map_inner(Clone::clone)
+    }
+
+    /// Return whether the inner optional value is `Some(_)`.
+    #[inline]
+    pub fn is_some(&self) -> bool {
+        // Equivalent to `self.peek(|option| option.is_some())`,
+        // but this is probably easier on the optimizer.
+        unsafe { (*self.0.get()).is_some() }
+    }
+
+    /// Return whether the inner optional value is `None(_)`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        // Equivalent to `self.peek(|option| option.is_none())`,
+        // but this is probably easier on the optimizer.
+        unsafe { (*self.0.get()).is_none() }
+    }
+}
+
+
 #[test]
 fn it_works() {
     let x = MoveCell::new("first".to_owned());
     assert_eq!(x.replace("second".to_owned()), "first");
     assert_eq!(x.replace("third".to_owned()), "second");
+
+    let x = MoveCell::new(Some("fourth".to_owned()));
+    assert_eq!(x.take(), Some("fourth".to_owned()));
+    assert_eq!(x.take(), None);
+    assert_eq!(x.replace(Some("fifth".to_owned())), None);
+    x.peek(|o| assert_eq!(o, &Some("fifth".to_owned())));
+    assert_eq!(x.map_inner(|s| s.len()), Some(5));
+    assert_eq!(x.clone_inner(), Some("fifth".to_owned()));
+    assert_eq!(x.is_some(), true);
+    assert_eq!(x.is_none(), false);
+    assert_eq!(x.take(), Some("fifth".to_owned()));
+    assert_eq!(x.is_some(), false);
+    assert_eq!(x.is_none(), true);
+    x.peek(|o| assert_eq!(o, &None));
 }
