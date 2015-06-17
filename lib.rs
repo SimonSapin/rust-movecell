@@ -106,7 +106,7 @@ impl<T> MoveCell<Option<T>> {
     /// Apply a function to a reference to the inner value if it is `Some(_)`.
     /// The cell’s contents are temporarily set to `None` during the call.
     #[inline]
-    pub fn map_inner<U, F>(&self, f: F) -> Option<U> where F: FnOnce(&T) -> U {
+    pub fn map<U, F>(&self, f: F) -> Option<U> where F: FnOnce(&T) -> U {
         self.peek(|option| option.as_ref().map(f))
     }
 
@@ -123,6 +123,13 @@ impl<T> MoveCell<Option<T>> {
     pub fn is_none(&self) -> bool {
         self.peek(|option| option.is_none())
     }
+
+    /// Apply a function to a reference to the inner value if it is `Some(_)`.
+    /// The cell’s contents are temporarily set to `None` during the call.
+    #[inline]
+    pub fn and_then<U, F>(&self, f: F) -> Option<U> where F: FnOnce(&T) -> Option<U> {
+        self.peek(|option| option.as_ref().and_then(f))
+    }
 }
 
 
@@ -137,7 +144,7 @@ fn it_works() {
     assert_eq!(x.take(), None);
     assert_eq!(x.replace(Some("fifth".to_owned())), None);
     x.peek(|o| assert_eq!(o, &Some("fifth".to_owned())));
-    assert_eq!(x.map_inner(|s| s.len()), Some(5));
+    assert_eq!(x.map(|s| s.len()), Some(5));
     assert_eq!(x.clone_inner(), Some("fifth".to_owned()));
     assert_eq!(x.is_some(), true);
     assert_eq!(x.is_none(), false);
