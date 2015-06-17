@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::fmt;
 use std::mem;
 
 /// A container similar to [`std::cell::Cell`](http://doc.rust-lang.org/std/cell/struct.Cell.html),
@@ -19,6 +20,12 @@ impl<T> MoveCell<T> {
         unsafe {
             mem::replace(&mut *self.0.get(), new_value)
         }
+    }
+}
+
+impl<T: Default> Default for MoveCell<T> {
+    fn default() -> MoveCell<T> {
+        MoveCell::new(T::default())
     }
 }
 
@@ -72,6 +79,33 @@ impl<T> MoveCell<Option<T>> {
     }
 }
 
+impl<T: Clone> Clone for MoveCell<Option<T>> {
+    fn clone(&self) -> MoveCell<Option<T>> {
+        MoveCell::new(self.clone_inner())
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for MoveCell<Option<T>> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(f.write_str("MoveCell("));
+        try!(self.peek(|option| option.fmt(f)));
+        try!(f.write_str(")"));
+        Ok(())
+    }
+}
+
+impl<T: Eq> Eq for MoveCell<Option<T>> {}
+impl<T: PartialEq> PartialEq for MoveCell<Option<T>> {
+    fn eq(&self, other: &MoveCell<Option<T>>) -> bool {
+        self.peek(|a| other.peek(|b| a == b))
+    }
+
+    fn ne(&self, other: &MoveCell<Option<T>>) -> bool {
+        self.peek(|a| other.peek(|b| a != b))
+    }
+}
+
+
 
 #[test]
 fn it_works() {
@@ -88,8 +122,12 @@ fn it_works() {
     assert_eq!(x.clone_inner(), Some("fifth".to_owned()));
     assert_eq!(x.is_some(), true);
     assert_eq!(x.is_none(), false);
+    assert_eq!(x.clone(), x);
+    assert_eq!(format!("{:?}", x), "MoveCell(Some(\"fifth\"))");
     assert_eq!(x.take(), Some("fifth".to_owned()));
     assert_eq!(x.is_some(), false);
     assert_eq!(x.is_none(), true);
     x.peek(|o| assert_eq!(o, &None));
+    assert_eq!(x.clone(), x);
+    assert_eq!(format!("{:?}", x), "MoveCell(None)");
 }
