@@ -21,6 +21,16 @@ impl<T> MoveCell<T> {
             mem::replace(&mut *self.0.get(), new_value)
         }
     }
+
+    /// Returns a reference to the underlying `UnsafeCell`.
+    ///
+    /// ## Unsafety
+    ///
+    /// This method is unsafe because `UnsafeCell`'s field is public.
+    #[inline]
+    pub unsafe fn as_unsafe_cell(&self) -> &UnsafeCell<T> {
+        &self.0
+    }
 }
 
 impl<T: Default> Default for MoveCell<T> {
