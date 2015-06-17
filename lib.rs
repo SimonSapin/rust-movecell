@@ -24,6 +24,7 @@ impl<T> MoveCell<T> {
 }
 
 impl<T: Default> Default for MoveCell<T> {
+    #[inline]
     fn default() -> MoveCell<T> {
         MoveCell::new(T::default())
     }
@@ -56,12 +57,14 @@ impl<T: Default> MoveCell<T> {
 }
 
 impl<T: Default + Clone> Clone for MoveCell<T> {
+    #[inline]
     fn clone(&self) -> MoveCell<T> {
         MoveCell::new(self.clone_inner())
     }
 }
 
 impl<T: Default + fmt::Debug> fmt::Debug for MoveCell<T> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(f.write_str("MoveCell("));
         try!(self.peek(|value| value.fmt(f)));
@@ -72,10 +75,12 @@ impl<T: Default + fmt::Debug> fmt::Debug for MoveCell<T> {
 
 impl<T: Default + Eq> Eq for MoveCell<T> {}
 impl<T: Default + PartialEq> PartialEq for MoveCell<T> {
+    #[inline]
     fn eq(&self, other: &MoveCell<T>) -> bool {
         self.peek(|a| other.peek(|b| a == b))
     }
 
+    #[inline]
     fn ne(&self, other: &MoveCell<T>) -> bool {
         self.peek(|a| other.peek(|b| a != b))
     }
