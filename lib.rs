@@ -29,37 +29,65 @@ impl<T: Default> Default for MoveCell<T> {
     }
 }
 
-
-/// Convenience methods for when the value happens to be an `Option`.
-impl<T> MoveCell<Option<T>> {
-    /// Return the inner optional value after replacing it with `None`.
+/// Convenience methods for when there is a default value.
+impl<T: Default> MoveCell<T> {
+    /// Return the inner value after replacing it with the default value.
     #[inline]
-    pub fn take(&self) -> Option<T> {
-        self.replace(None)
+    pub fn take(&self) -> T {
+        self.replace(T::default())
     }
 
-    /// Apply a function to a reference to the inner optional value.
-    /// The cell’s contents are temporarily set to `None` during the call.
+    /// Apply a function to a reference to the inner value.
+    /// The cell’s contents are temporarily set to the default value during the call.
     #[inline]
-    pub fn peek<U, F>(&self, f: F) -> U where F: FnOnce(&Option<T>) -> U {
+    pub fn peek<U, F>(&self, f: F) -> U where F: FnOnce(&T) -> U {
         let option = self.take();
         let result = f(&option);
         self.replace(option);
         result
     }
 
+    /// Return a clone of the inner optional value.
+    /// The cell’s contents are temporarily set to `None` during the clone.
+    #[inline]
+    pub fn clone_inner(&self) -> T where T: Clone {
+        self.peek(Clone::clone)
+    }
+}
+
+impl<T: Default + Clone> Clone for MoveCell<T> {
+    fn clone(&self) -> MoveCell<T> {
+        MoveCell::new(self.clone_inner())
+    }
+}
+
+impl<T: Default + fmt::Debug> fmt::Debug for MoveCell<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(f.write_str("MoveCell("));
+        try!(self.peek(|value| value.fmt(f)));
+        try!(f.write_str(")"));
+        Ok(())
+    }
+}
+
+impl<T: Default + Eq> Eq for MoveCell<T> {}
+impl<T: Default + PartialEq> PartialEq for MoveCell<T> {
+    fn eq(&self, other: &MoveCell<T>) -> bool {
+        self.peek(|a| other.peek(|b| a == b))
+    }
+
+    fn ne(&self, other: &MoveCell<T>) -> bool {
+        self.peek(|a| other.peek(|b| a != b))
+    }
+}
+
+/// Convenience methods for when the value happens to be an `Option`.
+impl<T> MoveCell<Option<T>> {
     /// Apply a function to a reference to the inner value if it is `Some(_)`.
     /// The cell’s contents are temporarily set to `None` during the call.
     #[inline]
     pub fn map_inner<U, F>(&self, f: F) -> Option<U> where F: FnOnce(&T) -> U {
         self.peek(|option| option.as_ref().map(f))
-    }
-
-    /// Return a clone of the inner optional value.
-    /// The cell’s contents are temporarily set to `None` during the clone.
-    #[inline]
-    pub fn clone_inner(&self) -> Option<T> where T: Clone {
-        self.map_inner(Clone::clone)
     }
 
     /// Return whether the inner optional value is `Some(_)`.
@@ -78,33 +106,6 @@ impl<T> MoveCell<Option<T>> {
         unsafe { (*self.0.get()).is_none() }
     }
 }
-
-impl<T: Clone> Clone for MoveCell<Option<T>> {
-    fn clone(&self) -> MoveCell<Option<T>> {
-        MoveCell::new(self.clone_inner())
-    }
-}
-
-impl<T: fmt::Debug> fmt::Debug for MoveCell<Option<T>> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(f.write_str("MoveCell("));
-        try!(self.peek(|option| option.fmt(f)));
-        try!(f.write_str(")"));
-        Ok(())
-    }
-}
-
-impl<T: Eq> Eq for MoveCell<Option<T>> {}
-impl<T: PartialEq> PartialEq for MoveCell<Option<T>> {
-    fn eq(&self, other: &MoveCell<Option<T>>) -> bool {
-        self.peek(|a| other.peek(|b| a == b))
-    }
-
-    fn ne(&self, other: &MoveCell<Option<T>>) -> bool {
-        self.peek(|a| other.peek(|b| a != b))
-    }
-}
-
 
 
 #[test]
