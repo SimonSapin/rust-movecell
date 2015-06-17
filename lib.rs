@@ -14,6 +14,12 @@ impl<T> MoveCell<T> {
         MoveCell(UnsafeCell::new(value))
     }
 
+    /// Consume the `MoveCell` and return the inner value.
+    #[inline]
+    pub fn into_inner(self) -> T {
+        unsafe { self.0.into_inner() }
+    }
+
     /// Return the inner value after replacing it with the given value.
     #[inline]
     pub fn replace(&self, new_value: T) -> T {
@@ -138,6 +144,7 @@ fn it_works() {
     let x = MoveCell::new("first".to_owned());
     assert_eq!(x.replace("second".to_owned()), "first");
     assert_eq!(x.replace("third".to_owned()), "second");
+    assert_eq!(x.into_inner(), "third");
 
     let x = MoveCell::new(Some("fourth".to_owned()));
     assert_eq!(x.take(), Some("fourth".to_owned()));
