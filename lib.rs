@@ -59,13 +59,14 @@ impl<T: Default> MoveCell<T> {
     }
 
     /// Return a clone of the inner optional value.
-    /// The cell’s contents are temporarily set to `None` during the clone.
+    /// The cell’s contents are temporarily set to the default value during the clone.
     #[inline]
     pub fn clone_inner(&self) -> T where T: Clone {
         self.peek(Clone::clone)
     }
 }
 
+/// The cell’s contents are temporarily set to the default value during the clone.
 impl<T: Default + Clone> Clone for MoveCell<T> {
     #[inline]
     fn clone(&self) -> MoveCell<T> {
@@ -73,6 +74,7 @@ impl<T: Default + Clone> Clone for MoveCell<T> {
     }
 }
 
+/// The cell’s contents are temporarily set to the default value during the formatting.
 impl<T: Default + fmt::Debug> fmt::Debug for MoveCell<T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -83,7 +85,10 @@ impl<T: Default + fmt::Debug> fmt::Debug for MoveCell<T> {
     }
 }
 
+/// The cell’s contents are temporarily set to the default value during the comparaison.
 impl<T: Default + Eq> Eq for MoveCell<T> {}
+
+/// The cell’s contents are temporarily set to the default value during the comparaison.
 impl<T: Default + PartialEq> PartialEq for MoveCell<T> {
     #[inline]
     fn eq(&self, other: &MoveCell<T>) -> bool {
@@ -106,12 +111,14 @@ impl<T> MoveCell<Option<T>> {
     }
 
     /// Return whether the inner optional value is `Some(_)`.
+    /// The cell’s contents are temporarily set to `None` during the call.
     #[inline]
     pub fn is_some(&self) -> bool {
         self.peek(|option| option.is_some())
     }
 
     /// Return whether the inner optional value is `None(_)`.
+    /// The cell’s contents are temporarily set to `None` during the call.
     #[inline]
     pub fn is_none(&self) -> bool {
         self.peek(|option| option.is_none())
