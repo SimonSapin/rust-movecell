@@ -108,17 +108,13 @@ impl<T> MoveCell<Option<T>> {
     /// Return whether the inner optional value is `Some(_)`.
     #[inline]
     pub fn is_some(&self) -> bool {
-        // Equivalent to `self.peek(|option| option.is_some())`,
-        // but this is probably easier on the optimizer.
-        unsafe { (*self.0.get()).is_some() }
+        self.peek(|option| option.is_some())
     }
 
     /// Return whether the inner optional value is `None(_)`.
     #[inline]
     pub fn is_none(&self) -> bool {
-        // Equivalent to `self.peek(|option| option.is_none())`,
-        // but this is probably easier on the optimizer.
-        unsafe { (*self.0.get()).is_none() }
+        self.peek(|option| option.is_none())
     }
 }
 
