@@ -1,6 +1,8 @@
 use std::cell::UnsafeCell;
 use std::fmt;
 use std::mem;
+use std::ops;
+use std::ptr;
 
 /// A container similar to [`std::cell::Cell`](http://doc.rust-lang.org/std/cell/struct.Cell.html),
 /// but that also supports not-implicitly-copyable types.
@@ -54,21 +56,14 @@ impl<T: Default> MoveCell<T> {
         self.replace(T::default())
     }
 
-    /// Apply a function to a reference to the inner value.
-    /// The cell’s contents are temporarily set to the default value during the call.
+    /// Take the value, and return it in a `Borrow` guard that will return it when dropped.
+    /// The cell’s contents are set to the default value until the guard is dropped.
     #[inline]
-    pub fn peek<U, F>(&self, f: F) -> U where F: FnOnce(&T) -> U {
-        let option = self.take();
-        let result = f(&option);
-        self.replace(option);
-        result
-    }
-
-    /// Return a clone of the inner optional value.
-    /// The cell’s contents are temporarily set to the default value during the clone.
-    #[inline]
-    pub fn clone_inner(&self) -> T where T: Clone {
-        self.peek(Clone::clone)
+    pub fn borrow(&self) -> Borrow<T> {
+        Borrow {
+            _cell: self,
+            _value: self.take()
+        }
     }
 }
 
@@ -76,7 +71,7 @@ impl<T: Default> MoveCell<T> {
 impl<T: Default + Clone> Clone for MoveCell<T> {
     #[inline]
     fn clone(&self) -> MoveCell<T> {
-        MoveCell::new(self.clone_inner())
+        MoveCell::new(self.borrow().clone())
     }
 }
 
@@ -84,10 +79,7 @@ impl<T: Default + Clone> Clone for MoveCell<T> {
 impl<T: Default + fmt::Debug> fmt::Debug for MoveCell<T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(f.write_str("MoveCell("));
-        try!(self.peek(|value| value.fmt(f)));
-        try!(f.write_str(")"));
-        Ok(())
+        write!(f, "MoveCell({:?})", *self.borrow())
     }
 }
 
@@ -98,43 +90,56 @@ impl<T: Default + Eq> Eq for MoveCell<T> {}
 impl<T: Default + PartialEq> PartialEq for MoveCell<T> {
     #[inline]
     fn eq(&self, other: &MoveCell<T>) -> bool {
-        self.peek(|a| other.peek(|b| a == b))
+        *self.borrow() == *other.borrow()
     }
 
     #[inline]
     fn ne(&self, other: &MoveCell<T>) -> bool {
-        self.peek(|a| other.peek(|b| a != b))
+        *self.borrow() != *other.borrow()
     }
 }
 
-/// Convenience methods for when the value happens to be an `Option`.
-impl<T> MoveCell<Option<T>> {
-    /// Apply a function to a reference to the inner value if it is `Some(_)`.
-    /// The cell’s contents are temporarily set to `None` during the call.
-    #[inline]
-    pub fn map<U, F>(&self, f: F) -> Option<U> where F: FnOnce(&T) -> U {
-        self.peek(|option| option.as_ref().map(f))
-    }
+/// A wrapper for a value "borrowed" from a `MoveCell`.
+/// When the wrapper is dropped, the value is returned to the cell automatically.
+pub struct Borrow<'a, T: 'a> {
+    _cell: &'a MoveCell<T>,
+    _value: T,
+}
 
-    /// Return whether the inner optional value is `Some(_)`.
-    /// The cell’s contents are temporarily set to `None` during the call.
-    #[inline]
-    pub fn is_some(&self) -> bool {
-        self.peek(|option| option.is_some())
-    }
+// Borrow intentionally does *not* implement Clone
+// so that borrow.clone() clones the inner value through auto-deref.
 
-    /// Return whether the inner optional value is `None(_)`.
-    /// The cell’s contents are temporarily set to `None` during the call.
-    #[inline]
-    pub fn is_none(&self) -> bool {
-        self.peek(|option| option.is_none())
+impl<'a, T> Borrow<'a, T> {
+    /// Consume the `Borrow` guard and return the value.
+    pub fn into_inner(self) -> T {
+        let value = unsafe { ptr::read(&self._value) };
+        mem::forget(self);
+        value
     }
+}
 
-    /// Apply a function to a reference to the inner value if it is `Some(_)`.
-    /// The cell’s contents are temporarily set to `None` during the call.
+impl<'a, T> Drop for Borrow<'a, T> {
+    fn drop(&mut self) {
+        // FIXME: make self._value a `ManuallyDrop` when that exists.
+        // https://github.com/rust-lang/rfcs/pull/197
+        mem::swap(&mut self._value, unsafe { &mut *self._cell.as_unsafe_cell().get() })
+    }
+}
+
+impl<'a, T> ops::Deref for Borrow<'a, T> {
+    type Target = T;
     #[inline]
-    pub fn and_then<U, F>(&self, f: F) -> Option<U> where F: FnOnce(&T) -> Option<U> {
-        self.peek(|option| option.as_ref().and_then(f))
+    fn deref(&self) -> &T { &self._value }
+}
+impl<'a, T> ops::DerefMut for Borrow<'a, T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut T { &mut self._value }
+}
+
+impl<'a, T: fmt::Debug> fmt::Debug for Borrow<'a, T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "movecell::Borrow({:?})", self._value)
     }
 }
 
@@ -150,17 +155,18 @@ fn it_works() {
     assert_eq!(x.take(), Some("fourth".to_owned()));
     assert_eq!(x.take(), None);
     assert_eq!(x.replace(Some("fifth".to_owned())), None);
-    x.peek(|o| assert_eq!(o, &Some("fifth".to_owned())));
-    assert_eq!(x.map(|s| s.len()), Some(5));
-    assert_eq!(x.clone_inner(), Some("fifth".to_owned()));
-    assert_eq!(x.is_some(), true);
-    assert_eq!(x.is_none(), false);
+    assert_eq!(&*x.borrow(), &Some("fifth".to_owned()));
+    assert_eq!(x.borrow().as_ref().map(|s| s.len()), Some(5));
+    assert_eq!(x.borrow().clone(), Some("fifth".to_owned()));
+    assert_eq!(x.borrow().is_some(), true);
+    assert_eq!(x.borrow().is_none(), false);
     assert_eq!(x.clone(), x);
     assert_eq!(format!("{:?}", x), "MoveCell(Some(\"fifth\"))");
+    assert_eq!(format!("{:?}", x.borrow()), "movecell::Borrow(Some(\"fifth\"))");
     assert_eq!(x.take(), Some("fifth".to_owned()));
-    assert_eq!(x.is_some(), false);
-    assert_eq!(x.is_none(), true);
-    x.peek(|o| assert_eq!(o, &None));
+    assert_eq!(x.borrow().is_some(), false);
+    assert_eq!(x.borrow().is_none(), true);
+    assert_eq!(&*x.borrow(), &None);
     assert_eq!(x.clone(), x);
     assert_eq!(format!("{:?}", x), "MoveCell(None)");
 }
