@@ -1,13 +1,16 @@
-use std::cell::UnsafeCell;
-use std::fmt;
-use std::mem;
-use std::ops;
-use std::ptr;
+#![cfg_attr(not(test), no_std)]
+
+use core::{
+    cell::UnsafeCell,
+    fmt,
+    mem,
+    ops,
+    ptr,
+};
 
 /// A container similar to [`std::cell::Cell`](http://doc.rust-lang.org/std/cell/struct.Cell.html),
 /// but that also supports not-implicitly-copyable types.
 pub struct MoveCell<T>(UnsafeCell<T>);
-
 
 impl<T> MoveCell<T> {
     /// Create a new `MoveCell` containing the given value.
@@ -19,7 +22,7 @@ impl<T> MoveCell<T> {
     /// Consume the `MoveCell` and return the inner value.
     #[inline]
     pub fn into_inner(self) -> T {
-        unsafe { self.0.into_inner() }
+        self.0.into_inner()
     }
 
     /// Return the inner value after replacing it with the given value.
@@ -87,15 +90,23 @@ impl<T: Default + fmt::Debug> fmt::Debug for MoveCell<T> {
 impl<T: Default + Eq> Eq for MoveCell<T> {}
 
 /// The cell’s contents are temporarily set to the default value during the comparaison.
-impl<T: Default + PartialEq> PartialEq for MoveCell<T> {
+impl<T: Default + Eq> PartialEq for MoveCell<T> {
     #[inline]
     fn eq(&self, other: &MoveCell<T>) -> bool {
-        *self.borrow() == *other.borrow()
+        //  Careful about self-comparison: the second borrow would return the default value.
+        //
+        //  Note that `T: PartialEq` is insufficient then, since MoveCell(NaN) compared to itself should be `false`.
+        self as *const _ == other as *const _ ||
+            *self.borrow() == *other.borrow()
     }
 
     #[inline]
     fn ne(&self, other: &MoveCell<T>) -> bool {
-        *self.borrow() != *other.borrow()
+        //  Careful about self-comparison: the second borrow would return the default value.
+        //
+        //  Note that `T: PartialEq` is insufficient then, since MoveCell(NaN) compared to itself should be `true`.
+        self as *const _ != other as *const _ &&
+            *self.borrow() != *other.borrow()
     }
 }
 
@@ -131,6 +142,7 @@ impl<'a, T> ops::Deref for Borrow<'a, T> {
     #[inline]
     fn deref(&self) -> &T { &self._value }
 }
+
 impl<'a, T> ops::DerefMut for Borrow<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T { &mut self._value }
@@ -143,9 +155,13 @@ impl<'a, T: fmt::Debug> fmt::Debug for Borrow<'a, T> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+use super::*;
 
 #[test]
-fn it_works() {
+fn brush_test() {
     let x = MoveCell::new("first".to_owned());
     assert_eq!(x.replace("second".to_owned()), "first");
     assert_eq!(x.replace("third".to_owned()), "second");
@@ -170,3 +186,13 @@ fn it_works() {
     assert_eq!(x.clone(), x);
     assert_eq!(format!("{:?}", x), "MoveCell(None)");
 }
+
+#[test]
+fn self_equality() {
+    let x = MoveCell::new("x".to_owned());
+
+    assert_eq!(x, x);
+    assert!(!(x != x));
+}
+
+} // mod tests

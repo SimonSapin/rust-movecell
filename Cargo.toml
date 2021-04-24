@@ -2,6 +2,7 @@
 name = "movecell"
 version = "0.2.0"
 authors = ["Simon Sapin <simon.sapin@exyr.org>"]
+edition = "2018"
 license = "Apache-2.0 / MIT"
 repository = "https://github.com/SimonSapin/rust-movecell"
 description = "`std::cell::Cell` for not-implicitly-copyable types."
